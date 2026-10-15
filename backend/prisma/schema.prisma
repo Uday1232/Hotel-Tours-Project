@@ -1,0 +1,330 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         UserRole  @default(CUSTOMER)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  bookings Booking[]
+  reviews  Review[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  CUSTOMER
+}
+
+// ============================================
+// HOTEL MANAGEMENT
+// ============================================
+
+model RoomType {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String
+  basePrice   Decimal  @db.Decimal(10, 2)
+  maxGuests   Int
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  rooms Room[]
+
+  @@map("room_types")
+}
+
+model Room {
+  id         String     @id @default(uuid())
+  roomTypeId String
+  number     String     @unique
+  floor      Int
+  status     RoomStatus @default(AVAILABLE)
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  roomType   RoomType      @relation(fields: [roomTypeId], references: [id])
+  images     RoomImage[]
+  bookings   BookingRoom[]
+  reviews    Review[]
+  amenities  RoomAmenity[]
+
+  @@index([roomTypeId])
+  @@index([status])
+  @@index([floor])
+  @@map("rooms")
+}
+
+enum RoomStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+  RESERVED
+}
+
+model RoomImage {
+  id        String  @id @default(uuid())
+  roomId    String
+  url       String
+  caption   String?
+  sortOrder Int     @default(0)
+  isPrimary Boolean @default(false)
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([isPrimary])
+  @@map("room_images")
+}
+
+// ============================================
+// AMENITIES
+// ============================================
+
+model Amenity {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  icon        String?
+  category    String?
+  isActive    Boolean @default(true)
+
+  rooms RoomAmenity[]
+
+  @@index([category])
+  @@map("amenities")
+}
+
+model RoomAmenity {
+  id        String  @id @default(uuid())
+  roomId    String
+  amenityId String
+
+  room    Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  amenity Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, amenityId])
+  @@index([roomId])
+  @@index([amenityId])
+  @@map("room_amenities")
+}
+
+// ============================================
+// TOUR MANAGEMENT
+// ============================================
+
+model TourPackage {
+  id             String          @id @default(uuid())
+  name           String
+  description    String
+  durationDays   Int
+  durationNights Int
+  price          Decimal         @db.Decimal(10, 2)
+  category       TourCategory
+  maxGroupSize   Int
+  isFeatured     Boolean         @default(false)
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  itinerary  TourItinerary[]
+  images     TourImage[]
+  bookings   BookingTour[]
+  reviews    Review[]
+
+  @@index([category])
+  @@index([isFeatured])
+  @@index([isActive])
+  @@map("tour_packages")
+}
+
+model TourImage {
+  id        String  @id @default(uuid())
+  tourId    String
+  url       String
+  caption   String?
+  sortOrder Int     @default(0)
+  isPrimary Boolean @default(false)
+
+  tour TourPackage @relation(fields: [tourId], references: [id], onDelete: Cascade)
+
+  @@index([tourId])
+  @@index([isPrimary])
+  @@map("tour_images")
+}
+
+enum TourCategory {
+  ADVENTURE
+  CULTURAL
+  BEACH
+  PILGRIMAGE
+  WILDLIFE
+  HONEYMOON
+  FAMILY
+}
+
+model TourItinerary {
+  id            String      @id @default(uuid())
+  tourId        String
+  dayNumber     Int
+  title         String
+  description   String
+  accommodation String?
+  meals         String?
+
+  tour TourPackage @relation(fields: [tourId], references: [id], onDelete: Cascade)
+
+  @@unique([tourId, dayNumber])
+  @@index([tourId])
+  @@map("tour_itineraries")
+}
+
+// ============================================
+// BOOKING MANAGEMENT
+// ============================================
+
+model Booking {
+  id            String        @id @default(uuid())
+  customerId    String
+  bookingNumber String        @unique
+  status        BookingStatus @default(PENDING)
+  totalAmount   Decimal       @db.Decimal(10, 2)
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  customer User           @relation(fields: [customerId], references: [id])
+  rooms    BookingRoom[]
+  tours    BookingTour[]
+  payment  Payment?
+
+  @@index([customerId])
+  @@index([bookingNumber])
+  @@index([status])
+  @@index([createdAt])
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model BookingRoom {
+  id            String   @id @default(uuid())
+  bookingId     String
+  roomId        String
+  checkIn       DateTime
+  checkOut      DateTime
+  pricePerNight Decimal  @db.Decimal(10, 2)
+  totalNights   Int
+  totalPrice    Decimal  @db.Decimal(10, 2)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  room    Room    @relation(fields: [roomId], references: [id])
+
+  @@index([bookingId])
+  @@index([roomId])
+  @@index([checkIn, checkOut])
+  @@map("booking_rooms")
+}
+
+model BookingTour {
+  id             String   @id @default(uuid())
+  bookingId      String
+  tourId         String
+  travelDate     DateTime
+  numberOfPeople Int
+  pricePerPerson Decimal  @db.Decimal(10, 2)
+  totalPrice     Decimal  @db.Decimal(10, 2)
+
+  booking Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  tour    TourPackage @relation(fields: [tourId], references: [id])
+
+  @@index([bookingId])
+  @@index([tourId])
+  @@index([travelDate])
+  @@map("booking_tours")
+}
+
+// ============================================
+// PAYMENT MANAGEMENT
+// ============================================
+
+model Payment {
+  id            String        @id @default(uuid())
+  bookingId     String        @unique
+  amount        Decimal       @db.Decimal(10, 2)
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  transactionId String?
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId])
+  @@index([status])
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  UPI
+  BANK_TRANSFER
+  ONLINE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// ============================================
+// REVIEW SYSTEM
+// ============================================
+
+model Review {
+  id        String      @id @default(uuid())
+  userId    String
+  roomId    String?
+  tourId    String?
+  rating    Int
+  comment   String?
+  createdAt DateTime    @default(now())
+
+  user User         @relation(fields: [userId], references: [id])
+  room Room?        @relation(fields: [roomId], references: [id])
+  tour TourPackage? @relation(fields: [tourId], references: [id])
+
+  @@index([userId])
+  @@index([roomId])
+  @@index([tourId])
+  @@index([rating])
+  @@map("reviews")
+}
